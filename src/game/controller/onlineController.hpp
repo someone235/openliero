@@ -59,6 +59,7 @@ class OnlineController : public Controller {
   uint32_t delay_ = 3;
   uint32_t next_input_ = 0;
   std::vector<std::map<uint32_t, uint8_t>> inputs_;
+  std::vector<uint8_t> previous_inputs_;
   struct Tick {
     std::vector<uint8_t> inputs;
     uint32_t checksum;

@@ -107,6 +107,7 @@ void OnlineController::Load(const std::vector<uint8_t>& snapshot, size_t local_i
 
 void OnlineController::InitializeInputs() {
   inputs_.resize(game.worms.size());
+  previous_inputs_.assign(game.worms.size(), 0);
   player_paused_.resize(game.worms.size(), false);
   for (auto& inputs : inputs_) {
     for (uint32_t frame = 0; frame < delay_; ++frame) {
@@ -126,7 +127,16 @@ void OnlineController::Broadcast(const std::vector<uint8_t>& packet) {
 
 void OnlineController::Step(const std::vector<uint8_t>& inputs) {
   for (size_t i = 0; i < game.worms.size(); ++i) {
-    game.worms[i]->control_states.Unpack(inputs[i]);
+    // PressedOnce consumes a control bit inside the simulation. Preserve that
+    // consumption while the physical key is held, and re-arm it only on a new
+    // press, matching local play and the rollback controller.
+    uint8_t const kCurrent = inputs[i] & 0x7f;
+    uint8_t const kPressed = kCurrent & ~previous_inputs_[i];
+    uint8_t const kReleased = previous_inputs_[i] & ~kCurrent;
+    auto& controls = game.worms[i]->control_states;
+    controls.istate |= kPressed;
+    controls.istate &= ~uint32_t{kReleased};
+    previous_inputs_[i] = kCurrent;
   }
   game.ProcessFrame();
   ++frame_;

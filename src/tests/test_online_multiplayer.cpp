@@ -271,3 +271,100 @@ TEST_CASE("Online games reject an empty weapon pool without hanging", "[online][
                                   }),
                       "Enable at least one weapon before hosting");
 }
+
+namespace {
+void AdvanceHeldInputs(OnlineMatch& match, const std::vector<uint8_t>& inputs, int ticks) {
+  for (int tick = 0; tick < ticks; ++tick) {
+    match.Deliver();
+    for (size_t player = 0; player < match.controllers.size(); ++player) {
+      match.controllers[player]->SetLocalInput(inputs[player]);
+      match.controllers[player]->Process();
+    }
+    match.Deliver();
+    for (size_t player = 1; player < match.controllers.size(); ++player) {
+      match.controllers[player]->Process();
+    }
+  }
+}
+
+void MakeOnlineWormsVisible(OnlineMatch& match) {
+  for (auto& controller : match.controllers) {
+    for (auto& worm : controller->game.worms) {
+      worm->visible = true;
+      worm->ready = false;
+      worm->killed_timer = 0;
+      worm->pos = fixedvec(Itof(80 + worm->index * 80), Itof(80));
+    }
+  }
+}
+}  // namespace
+
+TEST_CASE("Online weapon selection switches once per direction press", "[online][weapons][input]") {
+  auto const kPlayer = GENERATE(size_t{0}, size_t{1}, size_t{2});
+  auto const kDirection = GENERATE(Worm::kLeft, Worm::kRight);
+  OnlineMatch match(3);
+  MakeOnlineWormsVisible(match);
+  std::vector<uint8_t> held(3, 0);
+  held[kPlayer] = 1 << Worm::kChange;
+  AdvanceHeldInputs(match, held, 8);
+  int expected = 0;
+  for (int press = 0; press < 2; ++press) {
+    expected = (expected + (kDirection == Worm::kRight ? 1 : 4)) % NUM_WEAPONS;
+    held[kPlayer] |= 1 << kDirection;
+    // A short press spans several 70 Hz ticks. Keep holding well beyond the
+    // old repeat interval and check every tick, including across a full cycle.
+    AdvanceHeldInputs(match, held, 8);
+    for (int tick = 0; tick < 35; ++tick) {
+      AdvanceHeldInputs(match, held, 1);
+      for (auto const& controller : match.controllers) {
+        REQUIRE_FALSE(controller->Desynced());
+        REQUIRE(controller->game.worms[kPlayer]->current_weapon == expected);
+      }
+    }
+    held[kPlayer] &= ~(1 << kDirection);
+    AdvanceHeldInputs(match, held, 8);
+    for (auto const& controller : match.controllers) {
+      REQUIRE(controller->game.worms[kPlayer]->current_weapon == expected);
+    }
+  }
+}
+
+TEST_CASE("Online weapon selection ignores a direction already held when change is pressed",
+          "[online][weapons][input]") {
+  OnlineMatch match(3);
+  MakeOnlineWormsVisible(match);
+  std::vector<uint8_t> held(3, 0);
+  held[1] = 1 << Worm::kRight;
+  AdvanceHeldInputs(match, held, 8);
+  held[1] |= 1 << Worm::kChange;
+  AdvanceHeldInputs(match, held, 20);
+  for (auto const& controller : match.controllers) {
+    REQUIRE(controller->game.worms[1]->current_weapon == 0);
+  }
+  held[1] = 1 << Worm::kChange;
+  AdvanceHeldInputs(match, held, 8);
+  held[1] |= 1 << Worm::kRight;
+  AdvanceHeldInputs(match, held, 8);
+  for (auto const& controller : match.controllers) {
+    REQUIRE(controller->game.worms[1]->current_weapon == 1);
+  }
+}
+
+TEST_CASE("Online movement remains held until the direction is released", "[online][input]") {
+  OnlineMatch match(3);
+  MakeOnlineWormsVisible(match);
+  std::vector<uint8_t> held(3, 0);
+  held[2] = 1 << Worm::kRight;
+  AdvanceHeldInputs(match, held, 8);
+  for (int tick = 0; tick < 15; ++tick) {
+    AdvanceHeldInputs(match, held, 1);
+    for (auto const& controller : match.controllers) {
+      REQUIRE(controller->game.worms[2]->Pressed(Worm::kRight));
+    }
+  }
+  held[2] = 0;
+  AdvanceHeldInputs(match, held, 8);
+  for (auto const& controller : match.controllers) {
+    REQUIRE_FALSE(controller->game.worms[2]->Pressed(Worm::kRight));
+  }
+}
