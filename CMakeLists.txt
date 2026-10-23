@@ -209,6 +209,8 @@ set(GAME_SOURCES ${SOURCES}
   src/game/weapsel.cpp
   src/game/controller/commonController.cpp
   src/game/controller/localController.cpp
+  src/game/controller/onlineController.cpp
+  src/game/net/onlineRoom.cpp
   src/game/controller/rollbackController.cpp
   src/game/controller/replayController.cpp
   src/game/net/transport.cpp
@@ -450,6 +452,11 @@ if(OPENLIERO_BUILD_TESTS)
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
     DISCOVERY_MODE PRE_TEST
   )
+
+  add_executable(test_online_multiplayer src/tests/test_online_multiplayer.cpp)
+  target_link_libraries(test_online_multiplayer PRIVATE game Catch2::Catch2WithMain)
+  catch_discover_tests(test_online_multiplayer DISCOVERY_MODE PRE_TEST
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
   add_executable(test_transport src/tests/test_transport.cpp)
   target_link_libraries(test_transport PRIVATE game Catch2::Catch2WithMain)

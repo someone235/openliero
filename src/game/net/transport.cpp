@@ -1,10 +1,10 @@
 #include "transport.hpp"
 #include "iceAgent.hpp"
 
-#include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <utility>
 
 #include "../profiling.hpp"
 
@@ -35,20 +35,17 @@ static constexpr int kChannelReliable = 0;
 static constexpr int kChannelUnreliable = 1;
 static constexpr int kChannelInputBatch = 2;
 
-// Single active transport pointer. Only one ENet host exists per process.
-static std::atomic<NetTransport*> s_active_transport{nullptr};
+// ENet invokes intercept callbacks synchronously during Poll(). A scoped,
+// thread-local context supports independent links and nested polls without a
+// global registry whose lifetime could end before the global Gfx session.
+static thread_local NetTransport* s_polling_transport = nullptr;
 
-static void RegisterTransport(_ENetHost* /*unused*/, NetTransport* t) {
-  s_active_transport.store(t, std::memory_order_release);
-}
-
-static void UnregisterTransport(_ENetHost* /*unused*/) {
-  s_active_transport.store(nullptr, std::memory_order_release);
-}
-
-static NetTransport* GetTransportFromHost(_ENetHost* /*unused*/) {
-  return s_active_transport.load(std::memory_order_acquire);
-}
+struct PollingTransportScope {
+  explicit PollingTransportScope(NetTransport* transport)
+      : previous(std::exchange(s_polling_transport, transport)) {}
+  ~PollingTransportScope() { s_polling_transport = previous; }
+  NetTransport* previous;
+};
 
 NetTransport::NetTransport() { enet_initialize(); }
 
@@ -58,9 +55,6 @@ NetTransport::NetTransport(NetTransport&& other) noexcept
       state_(other.state_),
       iceBridge_(std::move(other.iceBridge_)),
       iceAgent_(std::move(other.iceAgent_)) {
-  if (enetHost_) {
-    RegisterTransport(enetHost_, this);
-  }
   other.enetHost_ = nullptr;
   other.peer_ = nullptr;
   other.state_ = kDisconnected;
@@ -74,9 +68,6 @@ NetTransport& NetTransport::operator=(NetTransport&& other) noexcept {
     state_ = other.state_;
     iceBridge_ = std::move(other.iceBridge_);
     iceAgent_ = std::move(other.iceAgent_);
-    if (enetHost_) {
-      RegisterTransport(enetHost_, this);
-    }
     other.enetHost_ = nullptr;
     other.peer_ = nullptr;
     other.state_ = kDisconnected;
@@ -94,11 +85,23 @@ void NetTransport::Disconnect() {
     enet_peer_disconnect_now(peer_, 0);
     peer_ = nullptr;
   }
+  // Forward the disconnect before stopping ICE, then detach the bridge while
+  // its agent is still alive. Stop the receive thread before closing sockets.
+  if (iceBridge_) {
+    iceBridge_->Poll();
+  }
+  if (iceAgent_) {
+    iceAgent_->Stop();
+  }
+  if (iceBridge_) {
+    iceBridge_->Destroy();
+  }
   if (enetHost_) {
-    UnregisterTransport(enetHost_);
     enet_host_destroy(enetHost_);
     enetHost_ = nullptr;
   }
+  iceBridge_.reset();
+  iceAgent_.reset();
   state_ = kDisconnected;
 }
 
@@ -121,13 +124,12 @@ void NetTransport::SetupIntercept() {
   if (!enetHost_) {
     return;
   }
-  RegisterTransport(enetHost_, this);
   enet_host_set_intercept(enetHost_, &NetTransport::InterceptCallback);
 }
 
 int NetTransport::InterceptCallback(_ENetHost* host, void* /*event*/) {
-  NetTransport const* self = GetTransportFromHost(host);
-  if (!self) {
+  NetTransport const* self = s_polling_transport;
+  if (!self || self->enetHost_ != host) {
     return 0;
   }
 
@@ -250,6 +252,7 @@ bool NetTransport::Poll() {
     iceAgent_->Poll();
   }
 
+  PollingTransportScope const kScope(this);
   ENetEvent event;
   while (enet_host_service(enetHost_, &event, 0) > 0) {
     switch (event.type) {
@@ -267,6 +270,14 @@ bool NetTransport::Poll() {
 
         static constexpr size_t kMaxPacketSize = 10 * 1024 * 1024;
         if (kLen > kMaxPacketSize) {
+          enet_packet_destroy(event.packet);
+          break;
+        }
+
+        if (kLen >= 2 && data[0] == 17 && data[1] == 1) {
+          if (on_room_packet) {
+            on_room_packet(std::vector<uint8_t>(data + 2, data + kLen));
+          }
           enet_packet_destroy(event.packet);
           break;
         }
@@ -730,4 +741,10 @@ void NetTransport::SendPacket(const void* data, size_t len) {
   if (enet_peer_send(peer_, kChannelReliable, packet) < 0) {
     enet_packet_destroy(packet);
   }
+}
+
+void NetTransport::SendRoomPacket(const std::vector<uint8_t>& payload) {
+  std::vector<uint8_t> packet{17, 1};
+  packet.insert(packet.end(), payload.begin(), payload.end());
+  SendPacket(packet.data(), packet.size());
 }

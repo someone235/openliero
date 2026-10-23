@@ -333,7 +333,7 @@ void SpectatorViewport::Draw(Game& game, Renderer& renderer, GameState state, bo
         if (kTimingOut) {
           contender_color = contender->MinimapColor();
         } else {
-          contender_color = Palette::kWormColorBlocks[contender->index].colour_index + 5;
+          contender_color = Palette::kWormColorBlocks[contender->index % 2].colour_index + 5;
         }
       } else {
         contender_color = kColor;
@@ -472,6 +472,10 @@ void SpectatorViewport::Draw(Game& game, Renderer& renderer, GameState state, bo
       for (auto const& worm_ptr : game.worms) {
         Worm const& w = *worm_ptr;
         if (w.visible) {
+          if (game.worms.size() > 2) {
+            renderer.pal.SetWormColour(w.index % 2, *w.settings, renderer.mode);
+            renderer.UpdatePal32();
+          }
           int const kTempX = Ftoi(w.pos.x) - 7 + kOx;
           int const kTempY = Ftoi(w.pos.y) - 5 + kOy;
           if (kTempX + 16 < 0 || kTempX >= kScrW || kTempY + 16 < 0 || kTempY >= kScrH) {
@@ -625,6 +629,10 @@ void SpectatorViewport::Draw(Game& game, Renderer& renderer, GameState state, bo
       for (std::size_t i = 0; i < game.worms.size(); ++i) {
         Worm const& w = *game.worms[i];
         if (w.visible) {
+          if (game.worms.size() > 2) {
+            renderer.pal.SetWormColour(w.index % 2, *w.settings, renderer.mode);
+            renderer.UpdatePal32();
+          }
           int const kTempX = Ftoi(w.pos.x) - 7 + kOx;
           int const kTempY = Ftoi(w.pos.y) - 5 + kOy;
           if (kTempX + 16 < 0 || kTempX >= kScrW || kTempY + 16 < 0 || kTempY >= kScrH) {

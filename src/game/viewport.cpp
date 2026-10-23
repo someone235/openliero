@@ -220,7 +220,7 @@ void Viewport::Draw(Game& game, Renderer& renderer, GameState /*state*/, bool is
         if (kTimingOut) {
           contender_color = contender->MinimapColor();
         } else {
-          contender_color = Palette::kWormColorBlocks[contender->index].colour_index + 5;
+          contender_color = Palette::kWormColorBlocks[contender->index % 2].colour_index + 5;
         }
       } else {
         contender_color = kColor;
@@ -501,6 +501,10 @@ void Viewport::Draw(Game& game, Renderer& renderer, GameState /*state*/, bool is
       Worm const& w = *game.worms[i];
 
       if (w.visible) {
+        if (game.worms.size() > 2) {
+          renderer.pal.SetWormColour(w.index % 2, *w.settings, renderer.mode);
+          renderer.UpdatePal32();
+        }
         int const kTempX = Ftoi(w.pos.x) - 7 + kOffs.x;
         int const kTempY = Ftoi(w.pos.y) - 5 + kOffs.y;
         int const kAngleFrame = w.AngleFrame();
@@ -544,6 +548,11 @@ void Viewport::Draw(Game& game, Renderer& renderer, GameState /*state*/, bool is
 
         BlitImage(renderer.bmp, common.WormSpriteObj(w.current_frame, w.direction, w.index), kTempX,
                   kTempY);
+        if (game.worms.size() > 2) {
+          common.font.DrawString(renderer.bmp,
+                                 std::to_string(w.index + 1) + ": " + w.settings->name, kTempX - 8,
+                                 kTempY - 8, 7);
+        }
       }
 
       if (w.ai) {

@@ -521,11 +521,12 @@ void Game::StartGame() {
 bool Game::IsGameOver() {
   if (settings->game_mode == Settings::kGmKillEmAll ||
       settings->game_mode == Settings::kGmScalesOfJustice) {
-    for (auto& worm : worms) {
-      if (worm->lives <= 0) {
-        return true;
-      }
+    auto const kSurvivors =
+        std::ranges::count_if(worms, [](const auto& worm) { return worm->lives > 0; });
+    if (worms.size() > 2) {
+      return kSurvivors <= 1;
     }
+    return std::ranges::any_of(worms, [](const auto& worm) { return worm->lives <= 0; });
   } else if (settings->game_mode == Settings::kGmGameOfTag) {
     for (auto& worm : worms) {
       if (worm->timer >= settings->time_to_lose) {

@@ -143,11 +143,11 @@ struct Common {
   int SoundIndex(std::string_view name) const;
 
   PalIdx* WormSprite(int f, int dir, int w) {
-    return worm_sprites.SpritePtr(f + dir * 7 * 3 + w * 2 * 7 * 3);
+    return worm_sprites.SpritePtr(f + dir * 7 * 3 + (w % 2) * 2 * 7 * 3);
   }
 
   Sprite WormSpriteObj(int f, int dir, int w) {
-    return worm_sprites[f + dir * 7 * 3 + w * 2 * 7 * 3];
+    return worm_sprites[f + dir * 7 * 3 + (w % 2) * 2 * 7 * 3];
   }
 
   PalIdx* FireConeSprite(int f, int dir) { return fire_cone_sprites.SpritePtr(f + dir * 7); }

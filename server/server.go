@@ -30,6 +30,9 @@ type Room struct {
 	Code      [RoomCodeLen]byte
 	Host      *Peer
 	Client    *Peer
+	Clients   map[uint32]*Peer
+	Locked    bool
+	NextID    uint32
 	CreatedAt time.Time
 	LastSeen  time.Time
 }
@@ -67,6 +70,13 @@ func (s *Server) Run() {
 }
 
 func (s *Server) handlePacket(data []byte, from *net.UDPAddr) {
+	if len(data) == 0 {
+		return
+	}
+	if data[0] >= MsgMultiCreate && data[0] <= MsgMultiLeave {
+		s.handleMultiplayer(data, from)
+		return
+	}
 	msgType := data[0]
 
 	switch msgType {
@@ -359,9 +369,10 @@ func (s *Server) cleanupLoop() {
 	defer ticker.Stop()
 	for range ticker.C {
 		type expiredRoom struct {
-			code       string
-			hostAddr   *net.UDPAddr
-			clientAddr *net.UDPAddr
+			code        string
+			hostAddr    *net.UDPAddr
+			clientAddr  *net.UDPAddr
+			clientAddrs []*net.UDPAddr
 		}
 		var expired []expiredRoom
 
@@ -376,6 +387,9 @@ func (s *Server) cleanupLoop() {
 				}
 				if room.Client != nil {
 					er.clientAddr = room.Client.Addr
+				}
+				for _, peer := range room.Clients {
+					er.clientAddrs = append(er.clientAddrs, peer.Addr)
 				}
 				expired = append(expired, er)
 				delete(s.rooms, code)
@@ -392,6 +406,9 @@ func (s *Server) cleanupLoop() {
 			}
 			if er.clientAddr != nil {
 				s.conn.WriteToUDP(msg, er.clientAddr)
+			}
+			for _, address := range er.clientAddrs {
+				s.conn.WriteToUDP(msg, address)
 			}
 		}
 	}

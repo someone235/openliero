@@ -126,6 +126,9 @@ struct NetTransport {
   // Must be called after createHostOnBridgeSocket.
   void AttachIce(std::unique_ptr<IceBridge> bridge, std::unique_ptr<IceAgent> agent);
 
+  void SendRoomPacket(const std::vector<uint8_t>& payload);
+  std::function<void(const std::vector<uint8_t>&)> on_room_packet;
+
   // --- General ---
   // Poll for events. Call once per frame.
   bool Poll();

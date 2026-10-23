@@ -13,6 +13,29 @@ and improvements to the original game (especially if they are optional).
 
 Patches are welcome!
 
+## Online multiplayer
+
+See [multiplayer.md](multiplayer.md) for setup, firewall ports, and controls.
+
+Choose **Host Online** to create a lobby and share its room code. Each guest
+chooses **Join Online**, enters the code, and presses Enter when ready. The host
+presses Enter to start once everyone is ready. Online rosters have no fixed
+player limit; local and direct-connect modes retain their two-player layout.
+
+Each player receives five independently randomized weapons every round. During
+a match, Escape pauses/resumes, Q leaves while paused, and E lets the host end the match. Hold Tab to show the
+player list; PgUp/PgDn pages through long lists. After a match, Enter on the host
+returns the room to the lobby for a rematch. A departing guest returns the
+remaining players to the lobby.
+
+The server in `server/` must be upgraded along with the clients. Run it with
+`cd server && go build -o openliero-relay . && ./openliero-relay` (UDP 19533).
+To use your own server, set
+`OPENLIERO_SIGNALING_SERVER=<server-address>` on every client;
+`OPENLIERO_SIGNALING_PORT` overrides the default port. ICE/STUN/TURN still carries
+game traffic between each guest and the host. Online play uses host-coordinated
+lockstep and waits for every player's input before advancing a frame.
+
 ## Downloads
 
 Download the latest release from the [releases page][releases].

@@ -218,7 +218,11 @@ void SignalingClient::Poll() {
     if (kElapsed >= static_cast<uint64_t>(kRetryIntervalMs)) {
       retryCount_++;
       uint8_t msg[1 + proto::kRoomCodeLen] = {};
-      msg[0] = (state_ == kCreating) ? proto::kCreateRoom : proto::kJoinRoom;
+      if (state_ == kCreating) {
+        msg[0] = multiplayer_ ? 0x20 : proto::kCreateRoom;
+      } else {
+        msg[0] = multiplayer_ ? 0x21 : proto::kJoinRoom;
+      }
       if (state_ == kJoining) {
         std::memcpy(msg + 1, roomCode_.data(), proto::kRoomCodeLen);
       }
@@ -248,7 +252,10 @@ void SignalingClient::Poll() {
       break;
     }
 
-    HandleMessage(recv_data, static_cast<size_t>(kRecvLen));
+    if (from_addr.port == resolvedAddr_.port &&
+        std::memcmp(&from_addr.host, &resolvedAddr_.host, sizeof(from_addr.host)) == 0) {
+      HandleMessage(recv_data, static_cast<size_t>(kRecvLen));
+    }
   }
 }
 
@@ -259,6 +266,39 @@ void SignalingClient::HandleMessage(const uint8_t* data, size_t len) {
   uint8_t const kType = data[0];
 
   switch (kType) {
+    case 0xa1:
+    case 0xa2: {
+      if (!multiplayer_ || len < 11 || roomCode_.size() != 6 ||
+          std::memcmp(data + 1, roomCode_.data(), 6) != 0) {
+        break;
+      }
+      uint32_t const kPeer = (uint32_t{data[7]} << 24) | (uint32_t{data[8]} << 16) |
+                             (uint32_t{data[9]} << 8) | data[10];
+      if (kType == 0xa1) {
+        size_t off = 11;
+        if (off < len) {
+          size_t const kUserSize = data[off++];
+          if (off + kUserSize < len) {
+            turnUser_ = std::string(reinterpret_cast<const char*>(data + off), kUserSize);
+            off += kUserSize;
+            size_t const kPasswordSize = data[off++];
+            if (off + kPasswordSize <= len) {
+              turnPassword_ = std::string(reinterpret_cast<const char*>(data + off), kPasswordSize);
+            }
+          }
+        }
+        if (state_ == kJoining) {
+          state_ = kWaitingForPeer;
+        }
+        if (on_room_peer) {
+          on_room_peer(kPeer);
+        }
+      } else if (on_room_ice) {
+        on_room_ice(kPeer, std::vector<uint8_t>(data + 11, data + len));
+      }
+      break;
+    }
+    case 0xa0:
     case proto::kRoomCreated: {
       if (len < 1 + proto::kRoomCodeLen) {
         break;
@@ -426,4 +466,66 @@ void SignalingClient::HandleMessage(const uint8_t* data, size_t len) {
     default:
       break;
   }
+}
+
+bool SignalingClient::CreateMultiplayerRoom(const std::string& address, uint16_t port) {
+  multiplayer_ = true;
+  if (!Connect(address, port)) {
+    return false;
+  }
+  uint8_t const kMsg[7] = {0x20};
+  Send(kMsg, sizeof(kMsg));
+  state_ = kCreating;
+  retryCount_ = 0;
+  lastSendMs_ = NowMs();
+  return true;
+}
+
+bool SignalingClient::JoinMultiplayerRoom(const std::string& address, uint16_t port,
+                                          const std::string& code) {
+  multiplayer_ = true;
+  if (code.size() != 6 || !Connect(address, port)) {
+    return false;
+  }
+  roomCode_ = code;
+  uint8_t msg[7] = {0x21};
+  std::memcpy(msg + 1, code.data(), 6);
+  Send(msg, sizeof(msg));
+  state_ = kJoining;
+  retryCount_ = 0;
+  lastSendMs_ = NowMs();
+  return true;
+}
+
+void SignalingClient::RouteIce(uint32_t peer, const std::vector<uint8_t>& payload) {
+  if (roomCode_.size() != 6 || payload.size() > 1900) {
+    return;
+  }
+  std::vector<uint8_t> msg(11);
+  msg[0] = 0x22;
+  std::memcpy(msg.data() + 1, roomCode_.data(), 6);
+  for (int i = 0; i < 4; ++i) {
+    msg[7 + i] = static_cast<uint8_t>(peer >> (24 - 8 * i));
+  }
+  msg.insert(msg.end(), payload.begin(), payload.end());
+  Send(msg.data(), msg.size());
+}
+
+void SignalingClient::LockRoom(bool locked) {
+  if (roomCode_.size() != 6) {
+    return;
+  }
+  uint8_t msg[8] = {0x23};
+  std::memcpy(msg + 1, roomCode_.data(), 6);
+  msg[7] = static_cast<uint8_t>(locked);
+  Send(msg, sizeof(msg));
+}
+
+void SignalingClient::LeaveRoom() {
+  if (roomCode_.size() != 6) {
+    return;
+  }
+  uint8_t msg[7] = {0x24};
+  std::memcpy(msg + 1, roomCode_.data(), 6);
+  Send(msg, sizeof(msg));
 }

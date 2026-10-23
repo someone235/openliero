@@ -1,3 +1,4 @@
+#include <enet.h>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstdint>
@@ -423,4 +424,49 @@ TEST_CASE("Transport rejects handshake with wrong protocol version", "[transport
   // Now also confirm the constant lines up — the test would silently
   // pass against any version if this slipped to a stale value.
   REQUIRE(NetTransport::kProtocolVersion == 8);
+}
+
+TEST_CASE("Independent transports keep intercept callbacks separate during nested polls",
+          "[transport]") {
+  NetTransport first;
+  NetTransport second;
+  REQUIRE(first.Host(0));
+  REQUIRE(second.Host(0));
+  int first_packets = 0;
+  int second_packets = 0;
+  first.on_intercepted_packet = [&](const uint8_t* data, size_t length) {
+    REQUIRE(length == 4);
+    REQUIRE(data[1] == 1);
+    ++first_packets;
+    second.Poll();
+    return true;
+  };
+  second.on_intercepted_packet = [&](const uint8_t* data, size_t length) {
+    REQUIRE(length == 4);
+    REQUIRE(data[1] == 2);
+    ++second_packets;
+    return true;
+  };
+  auto const kSocket = enet_socket_create(ENET_SOCKET_TYPE_DATAGRAM);
+  REQUIRE(kSocket != ENET_SOCKET_NULL);
+  ENetAddress address = {};
+  REQUIRE(enet_address_set_host(&address, "::1") == 0);
+  uint8_t packet[] = {201, 1, 0, 0};
+  ENetBuffer const kBuffer = {.data = packet, .dataLength = sizeof(packet)};
+  address.port = first.ListeningPort();
+  REQUIRE(enet_socket_send(kSocket, &address, &kBuffer, 1) == 4);
+  REQUIRE(enet_socket_send(kSocket, &address, &kBuffer, 1) == 4);
+  packet[1] = 2;
+  address.port = second.ListeningPort();
+  REQUIRE(enet_socket_send(kSocket, &address, &kBuffer, 1) == 4);
+  auto const kDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+  while ((first_packets < 2 || second_packets < 1) &&
+         std::chrono::steady_clock::now() < kDeadline) {
+    first.Poll();
+    second.Poll();
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  enet_socket_destroy(kSocket);
+  REQUIRE(first_packets == 2);
+  REQUIRE(second_packets == 1);
 }

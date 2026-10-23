@@ -30,15 +30,15 @@ package main
 
 const (
 	// Client → Server
-	MsgCreateRoom      byte = 0x01
-	MsgJoinRoom        byte = 0x02
-	MsgReportAddr      byte = 0x03 // legacy, ignored
-	MsgPunchOK         byte = 0x04 // legacy, ignored
-	MsgPunchFail       byte = 0x05 // legacy, ignored
-	MsgKeepalive       byte = 0x06
-	MsgIceCredentials  byte = 0x07
-	MsgIceCandidate    byte = 0x08
-	MsgIceGatherDone   byte = 0x09
+	MsgCreateRoom     byte = 0x01
+	MsgJoinRoom       byte = 0x02
+	MsgReportAddr     byte = 0x03 // legacy, ignored
+	MsgPunchOK        byte = 0x04 // legacy, ignored
+	MsgPunchFail      byte = 0x05 // legacy, ignored
+	MsgKeepalive      byte = 0x06
+	MsgIceCredentials byte = 0x07
+	MsgIceCandidate   byte = 0x08
+	MsgIceGatherDone  byte = 0x09
 
 	// Server → Client
 	MsgRoomCreated     byte = 0x81
@@ -55,4 +55,19 @@ const (
 	ErrInvalidMsg   byte = 0x03
 
 	RoomCodeLen = 6
+)
+
+// Multiplayer signaling uses separate message types so old two-player clients
+// cannot accidentally join a room using different gameplay packet semantics.
+// Route: [type][room:6][client ID:u32 BE][ICE payload]. ID identifies the
+// host/client link; clients can only route to their host, never impersonate peers.
+const (
+	MsgMultiCreate  byte = 0x20
+	MsgMultiJoin    byte = 0x21
+	MsgMultiRoute   byte = 0x22
+	MsgMultiLock    byte = 0x23
+	MsgMultiLeave   byte = 0x24
+	MsgMultiCreated byte = 0xa0
+	MsgMultiJoined  byte = 0xa1
+	MsgMultiRouted  byte = 0xa2
 )

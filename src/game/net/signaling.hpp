@@ -38,6 +38,15 @@ class SignalingClient {
   bool CreateRoom(const std::string& server_addr, uint16_t server_port);
   bool JoinRoom(const std::string& server_addr, uint16_t server_port, const std::string& room_code);
 
+  // Multiplayer rooms retain signaling while the host accepts more players.
+  bool CreateMultiplayerRoom(const std::string& address, uint16_t port);
+  bool JoinMultiplayerRoom(const std::string& address, uint16_t port, const std::string& code);
+  void RouteIce(uint32_t peer, const std::vector<uint8_t>& payload);
+  void LockRoom(bool locked);
+  void LeaveRoom();
+  std::function<void(uint32_t)> on_room_peer;
+  std::function<void(uint32_t, const std::vector<uint8_t>&)> on_room_ice;
+
   // Legacy hole-punch methods (kept for transition)
   void ReportAddress(uint8_t addr_type, const std::string& ip, uint16_t port);
   void ReportPunchOk();
@@ -84,6 +93,7 @@ class SignalingClient {
   void Send(const void* data, size_t len);
   void HandleMessage(const uint8_t* data, size_t len);
 
+  bool multiplayer_ = false;
   ENetSocket sock_{ENET_SOCKET_NULL};
   enum State state_ { kIdle };
   std::string roomCode_;

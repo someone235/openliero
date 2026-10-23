@@ -200,7 +200,7 @@ struct Worm {
     control_states.Set(control, !control_states[control]);
   }
 
-  int MinimapColor() const { return 129 + index * 4; }
+  int MinimapColor() const { return 129 + (index % 2) * 4; }
 
   void BeginRespawn(Game& game);
   void DoRespawning(Game& game);

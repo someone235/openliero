@@ -27,6 +27,7 @@
 
 #include "controller/controller.hpp"
 #include "controller/localController.hpp"
+#include "controller/onlineController.hpp"
 #include "controller/replayController.hpp"
 #include "profiling.hpp"
 
@@ -779,6 +780,9 @@ int Gfx::FindGamepadForPlayer(int player_idx) {
   // If the other player also wants a gamepad with the same name,
   // give the first candidate to player 0 and the second to player 1.
   int const kOtherPlayer = 1 - player_idx;
+  if (kOtherPlayer < 0) {
+    return candidates[0];
+  }
   WormSettings const& other_ws = *settings->worm_settings[kOtherPlayer];
   if (candidates.size() >= 2 && other_ws.input_device != WormSettingsExtensions::kInputKeyboard &&
       other_ws.gamepad_name == ws.gamepad_name) {
@@ -800,6 +804,21 @@ void Gfx::DispatchGamepadInput(int gp_idx, uint32_t gamepad_key, bool state,
     dos_keys[kDkEscape] = true;
     if (controller) {
       controller->OnKey(kDkEscape, /*state=*/true);
+    }
+    return;
+  }
+
+  // Each online client uses the network profile, independently of its worm
+  // slot in the room or its local hotseat player settings.
+  if (dynamic_cast<OnlineController*>(controller)) {
+    auto const& profile = *settings->worm_settings[Settings::kNetworkPlayerIdx];
+    if (profile.input_device != WormSettings::kInputKeyboard &&
+        FindGamepadForPlayer(Settings::kNetworkPlayerIdx) == gp_idx) {
+      for (int control = 0; control < WormSettings::kMaxControlEx; ++control) {
+        if (profile.gamepad_controls[control] == gamepad_key) {
+          controller->OnKey(GamepadControlToExKey(0, control), state);
+        }
+      }
     }
     return;
   }
