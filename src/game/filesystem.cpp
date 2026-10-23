@@ -570,11 +570,17 @@ struct FsNodeFilesystem : FsNodeImp {
   }
 
   std::unique_ptr<io::Writer> TryToWriter() override {
-    FILE* f = fopen(path.c_str(), "wbe");
+    // Microsoft's CRT uses N for non-inheritance; POSIX uses e for close-on-exec.
+#ifdef _WIN32
+    constexpr auto* kWriteMode = "wbN";
+#else
+    constexpr auto* kWriteMode = "wbe";
+#endif
+    FILE* f = fopen(path.c_str(), kWriteMode);
     if (!f) {
       // Try to create directories
       CreateDirectories(path);
-      f = fopen(path.c_str(), "wbe");
+      f = fopen(path.c_str(), kWriteMode);
       if (!f) {
         return nullptr;
       }

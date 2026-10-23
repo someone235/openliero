@@ -36,6 +36,20 @@ To use your own server, set
 game traffic between each guest and the host. Online play uses host-coordinated
 lockstep and waits for every player's input before advancing a frame.
 
+## Windows launcher for this checkout
+
+Double-click `Play Liero.bat` in the project root. It launches an installed
+Windows build from `install/windows-x64`, `install/windows-arm64`, or
+`install/windows-x64-ci`, or a portable build extracted into `LIERO`.
+If `LIERO` supplies `openliero.cmd`, the batch file can use that launcher too,
+preserving its ruleset selection and nested runtime location.
+Command-line arguments can also be passed through the batch file.
+
+For local online play, first double-click `Start Server.bat` and keep its window
+open, then launch each player with `Play Liero.bat`. The game uses the signaling
+server at `127.0.0.1:19533`. The server launcher rebuilds when Go is on PATH,
+otherwise it uses `server/openliero-relay.exe` if already built.
+
 ## Downloads
 
 Download the latest release from the [releases page][releases].

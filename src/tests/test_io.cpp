@@ -1,13 +1,42 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <random>
 #include <vector>
 
+#include "filesystem.hpp"
 #include "io/coding.hpp"
 #include "io/deflate.hpp"
 #include "io/stream.hpp"
+
+TEST_CASE("FsNode writers create directories and overwrite binary files", "[io][filesystem]") {
+  struct TestDirectory {
+    std::filesystem::path path =
+        std::filesystem::temp_directory_path() / "openliero_test_file_writer";
+    ~TestDirectory() { std::filesystem::remove_all(path); }
+  } const kDirectory;
+  FsNode const kFile = FsNode(kDirectory.path.string()) / "nested" / "payload.bin";
+  std::vector<uint8_t> const kData{0x00, 0x0A, 0x0D, 0x1A, 0xFF};
+  {
+    auto writer = kFile.ToWriter();
+    writer->Put(kData.data(), kData.size());
+  }
+  {
+    auto reader = kFile.ToReader();
+    std::vector<uint8_t> result(kData.size());
+    REQUIRE(reader->TryGet(result.data(), result.size()) == result.size());
+    REQUIRE(result == kData);
+  }
+  {
+    auto writer = kFile.ToWriter();
+    writer->Put(0x42);
+  }
+  auto reader = kFile.ToReader();
+  REQUIRE(reader->Get() == 0x42);
+  REQUIRE_THROWS_AS(reader->Get(), io::EndOfStream);
+}
 
 TEST_CASE("io::MemReader reads exact bytes", "[io]") {
   std::vector<uint8_t> const kData{0x01, 0x02, 0x03};

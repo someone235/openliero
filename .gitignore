@@ -15,6 +15,7 @@ tools/vcpkg/vcpkg/
 
 # Server binary
 server/openliero-relay
+server/openliero-relay.exe
 
 # macOS
 ._*
