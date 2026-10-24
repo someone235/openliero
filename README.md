@@ -36,6 +36,19 @@ To use your own server, set
 game traffic between each guest and the host. Online play uses host-coordinated
 lockstep and waits for every player's input before advancing a frame.
 
+## Linux launchers for this checkout
+
+Run `./start_serrver.sh` to start the server and `./play_liero.sh` to launch
+the game in `LIERO/`. Both load and export settings from the project root's
+`.env` file, even when launched from another directory. Copy `.env.example`
+to `.env` if needed; use shell-style `KEY=value` assignments.
+
+Set `OPENLIERO_SIGNALING_SERVER` to the server's reachable address and
+`OPENLIERO_SIGNALING_PORT` to its UDP port (default `19533`). Open that UDP
+port on the server's firewall/router. The server launcher rebuilds when Go is
+available, otherwise it uses the existing `server/openliero-relay` executable.
+Both scripts forward command-line arguments to their respective programs.
+
 ## Windows launcher for this checkout
 
 Double-click `Play Liero.bat` in the project root. It launches an installed
