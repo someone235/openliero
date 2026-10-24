@@ -47,7 +47,9 @@ if(OPENLIERO_USE_VCPKG)
   set(VCPKG_BOOTSTRAP_OPTIONS "-disableMetrics")
   set(VCPKG_INSTALL_OPTIONS "--no-print-usage")
   set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
-  set(X_VCPKG_APPLOCAL_DEPS_INSTALL ON)
+  # InstallWindowsRuntimeDependencies handles DLLs for every Windows toolchain.
+  # Keep vcpkg's build-tree deployment, but avoid a second install-time copier.
+  set(X_VCPKG_APPLOCAL_DEPS_INSTALL OFF)
   if(OPENLIERO_ENABLE_TRACY)
     list(APPEND VCPKG_MANIFEST_FEATURES "profiling")
   endif()
@@ -241,6 +243,7 @@ set(GAME_SOURCES ${SOURCES}
 add_library(game ${GAME_SOURCES})
 if(WIN32)
   target_compile_definitions(game PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN)
+  target_link_libraries(game PUBLIC iphlpapi)
 endif()
 target_link_libraries(game
   PUBLIC
@@ -382,12 +385,18 @@ else()
   set(OPENLIERO_INSTALL_DATADIR ${CMAKE_INSTALL_DATADIR}/openliero)
 endif()
 
-install(TARGETS openliero DESTINATION ${OPENLIERO_INSTALL_BINDIR})
+set(OPENLIERO_INSTALL_TARGETS openliero)
 if(OPENLIERO_BUILD_TCTOOL)
-  install(TARGETS tctool DESTINATION ${OPENLIERO_INSTALL_BINDIR})
+  list(APPEND OPENLIERO_INSTALL_TARGETS tctool)
 endif()
 if(OPENLIERO_BUILD_VIDEOTOOL)
-  install(TARGETS videotool DESTINATION ${OPENLIERO_INSTALL_BINDIR})
+  list(APPEND OPENLIERO_INSTALL_TARGETS videotool)
+endif()
+install(TARGETS ${OPENLIERO_INSTALL_TARGETS} DESTINATION ${OPENLIERO_INSTALL_BINDIR})
+
+if(WIN32)
+  include(InstallWindowsRuntimeDependencies)
+  openliero_install_windows_runtime_dependencies(${OPENLIERO_INSTALL_TARGETS})
 endif()
 
 if(EMSCRIPTEN)

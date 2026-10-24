@@ -17,6 +17,9 @@ tools/vcpkg/vcpkg/
 server/openliero-relay
 server/openliero-relay.exe
 
+# Local environment
+.env
+
 # macOS
 ._*
 .DS_Store

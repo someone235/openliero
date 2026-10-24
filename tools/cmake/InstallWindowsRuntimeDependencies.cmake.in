@@ -1,0 +1,101 @@
+cmake_policy(VERSION 3.25)
+
+# Older PE scanners silently ignore the space-indented LLVM import table.
+if(CMAKE_HOST_WIN32 AND CMAKE_VERSION VERSION_LESS 3.30
+    AND "@OPENLIERO_RUNTIME_INSPECTOR@" MATCHES "llvm-objdump")
+  message(FATAL_ERROR "Windows DLL installation with llvm-objdump requires CMake 3.30 or newer.")
+endif()
+
+set(_runtime_executables [==[@OPENLIERO_RUNTIME_EXECUTABLES@]==])
+set(_runtime_dlls [==[@OPENLIERO_RUNTIME_TARGET_DLLS@;@OPENLIERO_RUNTIME_COMPILER_DLLS@]==])
+set(_runtime_directories [==[@OPENLIERO_RUNTIME_LIBRARY_DIRECTORIES@;@OPENLIERO_RUNTIME_COMPILER_DIRECTORIES@]==])
+set(_runtime_stage [==[@CMAKE_CURRENT_BINARY_DIR@/windows-runtime-stage/$<CONFIG>]==])
+
+# Always scan a fresh staging directory. Old installed DLLs must not hide missing
+# dependencies, and MSVC runtimes must resolve from this toolset's redistributables
+# instead of whichever version happens to be installed in Windows/System32.
+file(REMOVE_RECURSE "${_runtime_stage}")
+file(MAKE_DIRECTORY "${_runtime_stage}")
+list(REMOVE_DUPLICATES _runtime_dlls)
+set(_staged_executables)
+foreach(source IN LISTS _runtime_executables _runtime_dlls)
+  if(source STREQUAL "")
+    continue()
+  endif()
+  if(NOT EXISTS "${source}")
+    message(FATAL_ERROR "Windows runtime input is missing: ${source}. Build before installing.")
+  endif()
+  get_filename_component(name "${source}" NAME)
+  get_filename_component(directory "${source}" DIRECTORY)
+  list(APPEND _runtime_directories "${directory}")
+  if(EXISTS "${_runtime_stage}/${name}")
+    file(SHA256 "${source}" source_hash)
+    file(SHA256 "${_runtime_stage}/${name}" staged_hash)
+    if(NOT source_hash STREQUAL staged_hash)
+      message(FATAL_ERROR "Conflicting Windows runtime files named ${name}: ${source}")
+    endif()
+  else()
+    file(COPY_FILE "${source}" "${_runtime_stage}/${name}")
+  endif()
+  if(source IN_LIST _runtime_executables)
+    list(APPEND _staged_executables "${_runtime_stage}/${name}")
+  endif()
+endforeach()
+list(PREPEND _runtime_directories "${_runtime_stage}")
+list(FILTER _runtime_directories EXCLUDE REGEX "^$")
+list(REMOVE_DUPLICATES _runtime_directories)
+
+set(CMAKE_GET_RUNTIME_DEPENDENCIES_COMMAND [==[@OPENLIERO_RUNTIME_INSPECTOR@]==])
+if(NOT CMAKE_HOST_WIN32)
+  include("@CMAKE_CURRENT_FUNCTION_LIST_DIR@/CollectWindowsCrossRuntime.cmake")
+  openliero_collect_windows_cross_runtime("${_staged_executables}" "${_runtime_directories}")
+else()
+  # Build a case-insensitive, escaped Windows-root regex (directory casing is not
+  # normalized by CMake's PE scanner). API-set imports are supplied by Windows.
+  file(TO_CMAKE_PATH "$ENV{SystemRoot}" _windows_root)
+  if(_windows_root STREQUAL "")
+    message(FATAL_ERROR "SystemRoot is required to identify Windows system DLLs.")
+  endif()
+  string(TOLOWER "${_windows_root}" _windows_regex)
+  string(REGEX REPLACE "([][+.*()^$?|\\\\])" "\\\\\\1" _windows_regex "${_windows_regex}")
+  foreach(code RANGE 97 122)
+    string(ASCII ${code} lower)
+    string(TOUPPER "${lower}" upper)
+    string(REPLACE "${lower}" "[${lower}${upper}]" _windows_regex "${_windows_regex}")
+  endforeach()
+  string(REPLACE "/" [=[[/\\]]=] _windows_regex "${_windows_regex}")
+  string(APPEND _windows_regex [=[[/\\]]=])
+  if(POLICY CMP0207)
+    cmake_policy(SET CMP0207 NEW)
+  endif()
+
+  set(CMAKE_GET_RUNTIME_DEPENDENCIES_PLATFORM windows+pe)
+  set(CMAKE_GET_RUNTIME_DEPENDENCIES_TOOL "@OPENLIERO_RUNTIME_INSPECTOR_TOOL@")
+  file(GET_RUNTIME_DEPENDENCIES
+    EXECUTABLES ${_staged_executables}
+    DIRECTORIES ${_runtime_directories}
+    RESOLVED_DEPENDENCIES_VAR _resolved
+    UNRESOLVED_DEPENDENCIES_VAR _unresolved
+    CONFLICTING_DEPENDENCIES_PREFIX _conflicts
+    PRE_EXCLUDE_REGEXES "^api-ms-" "^ext-ms-"
+    POST_INCLUDE_REGEXES "[/\\\\](msvcp[0-9][^/]*|vcruntime[0-9][^/]*|concrt[0-9][^/]*)\\.dll$"
+    POST_EXCLUDE_REGEXES "^${_windows_regex}")
+endif()
+if(_unresolved)
+  message(FATAL_ERROR
+    "Missing Windows runtime DLLs: ${_unresolved}. Searched: ${_runtime_directories}. "
+    "Install the matching dependency/compiler runtimes, or set OPENLIERO_RUNTIME_LIBRARY_DIRECTORIES.")
+endif()
+if(_conflicts_FILENAMES)
+  message(FATAL_ERROR "Conflicting Windows runtime DLLs: ${_conflicts_FILENAMES}")
+endif()
+foreach(library IN LISTS _resolved)
+  if(CMAKE_HOST_WIN32 AND library MATCHES "^${_windows_regex}")
+    message(FATAL_ERROR
+      "Compiler runtime ${library} resolved inside Windows instead of the compiler redistributables.")
+  endif()
+endforeach()
+if(_resolved)
+  file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/@OPENLIERO_INSTALL_BINDIR@"
+    TYPE FILE FILES ${_resolved})
+endif()

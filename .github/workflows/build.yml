@@ -178,6 +178,35 @@ jobs:
         if: runner.os == 'Windows'
         run: cmake --install build/windows-x64-ci --config Release
 
+      - name: Smoke test installed Windows runtime
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $bundle = (Resolve-Path 'install/windows-x64-ci').Path
+          $oldPath = $env:PATH
+          $oldVideo = $env:SDL_VIDEODRIVER
+          $oldAudio = $env:SDL_AUDIODRIVER
+          $game = $null
+          try {
+            $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+            $env:SDL_VIDEODRIVER = 'dummy'
+            $env:SDL_AUDIODRIVER = 'dummy'
+            $game = Start-Process -FilePath "$bundle/openliero.exe" `
+              -ArgumentList @('--config-root', "`"$bundle`"") `
+              -WorkingDirectory $env:RUNNER_TEMP -WindowStyle Hidden -PassThru
+            if ($game.WaitForExit(8000)) {
+              throw "Installed game exited during startup: $($game.ExitCode)"
+            }
+          } finally {
+            if ($game -and -not $game.HasExited) {
+              $game.Kill()
+              $game.WaitForExit()
+            }
+            $env:PATH = $oldPath
+            $env:SDL_VIDEODRIVER = $oldVideo
+            $env:SDL_AUDIODRIVER = $oldAudio
+          }
+
       - name: Sign EXE (Windows)
         if: runner.os == 'Windows' && env.CERT_AVAILABLE == 'true'
         env:

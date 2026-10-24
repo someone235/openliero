@@ -40,15 +40,72 @@ lockstep and waits for every player's input before advancing a frame.
 
 Double-click `Play Liero.bat` in the project root. It launches an installed
 Windows build from `install/windows-x64`, `install/windows-arm64`, or
-`install/windows-x64-ci`, or a portable build extracted into `LIERO`.
+`install/windows-x64-ci`, `install/windows-x64-cross`, or a portable build
+extracted into `LIERO`.
 If `LIERO` supplies `openliero.cmd`, the batch file can use that launcher too,
 preserving its ruleset selection and nested runtime location.
 Command-line arguments can also be passed through the batch file.
 
-For local online play, first double-click `Start Server.bat` and keep its window
-open, then launch each player with `Play Liero.bat`. The game uses the signaling
-server at `127.0.0.1:19533`. The server launcher rebuilds when Go is on PATH,
-otherwise it uses `server/openliero-relay.exe` if already built.
+All Windows batch launchers load the project root's `.env` file. Copy
+`.env.example` to `.env` if needed, then set `OPENLIERO_SIGNALING_SERVER` to the
+relay hostname and `OPENLIERO_SIGNALING_PORT` to its UDP port. The supplied
+configuration uses `lliero.duckdns.org:19533`; `.env` stays out of Git.
+
+To run a server on this PC, double-click `Start Server.bat` and keep its window
+open. For local clients, set `OPENLIERO_SIGNALING_SERVER=127.0.0.1` in `.env`
+and launch each player with `Play Liero.bat`. The server launcher uses the
+configured port and rebuilds when Go is on PATH, otherwise it uses
+`server/openliero-relay.exe` if already built.
+
+### Building a complete Windows bundle
+
+Run `cmake --workflow --preset windows-x64`, then
+`cmake --install build/windows-x64 --config Release`. The install directory
+contains the game, assets, and required dependency and compiler-runtime DLLs.
+Copy that complete directory to another Windows PC; it does not need a compiler
+or vcpkg. Install Debug builds with `--config Debug` into a separate directory.
+
+The Windows installer scans every enabled executable, including optional tools,
+and fails on missing or conflicting DLLs. It takes libraries from the configured
+build dependencies and compiler, excluding Windows system DLLs. For dependencies
+in nonstandard locations, configure `OPENLIERO_RUNTIME_LIBRARY_DIRECTORIES` with
+a semicolon-separated list of DLL directories. CI smoke-tests the installed game
+with development directories removed from `PATH`.
+
+Windows-hosted LLVM-MinGW builds require CMake 3.30 or newer for DLL scanning.
+
+### Building Windows artifacts on Linux
+
+Install CMake (3.25+), Ninja, Git, curl, tar, Python 3, a native C/C++ compiler,
+pkg-config, zip/unzip, and a MinGW-w64 cross-toolchain with C++23 support.
+[LLVM-MinGW](https://github.com/mstorsjo/llvm-mingw/releases) is supported: unpack
+its Linux-hosted UCRT release and add its `bin/` directory to `PATH`, or set
+`LLVM_MINGW_ROOT` to its installation directory. All Windows dependencies are
+built with the selected cross-toolchain; Linux host tools use the native compiler.
+
+```bash
+export LLVM_MINGW_ROOT=/opt/llvm-mingw
+cmake --workflow --preset windows-x64-cross
+cmake --install build/windows-x64-cross --config Release
+```
+
+The complete Windows bundle is in `install/windows-x64-cross/`, including `.exe`
+files, game data, and required DLLs. Copy the entire directory to Windows to play.
+Use `windows-x64-cross-debug` to build Debug, then install with `--config Debug`
+and a separate `--prefix`. The cross-build does not need Windows, Wine, or a
+Windows `SystemRoot`; Windows system DLLs are excluded explicitly. Missing
+non-system DLLs still fail installation. Run the installed executable on Windows
+or through Wine to smoke-test startup.
+
+The DLL collector has a standalone regression fixture. On Linux, with the same
+toolchain installed, run:
+
+```bash
+cmake -S tools/cmake/tests/windows-runtime -B tmp/windows-runtime-tests -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE="$PWD/tools/cmake/toolchains/windows-x64-cross.cmake"
+cmake --build tmp/windows-runtime-tests
+ctest --test-dir tmp/windows-runtime-tests --output-on-failure
+```
 
 ## Downloads
 

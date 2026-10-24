@@ -1,13 +1,14 @@
 @echo off
-setlocal
-set "OPENLIERO_SIGNALING_SERVER=127.0.0.1"
-set "OPENLIERO_SIGNALING_PORT=19533"
+setlocal DisableDelayedExpansion
+call "%~dp0scripts\load-env.bat"
 rem Resolve paths relative to this file, including when launched from a shortcut.
 set "game_dir=%~dp0install\windows-x64"
 if exist "%game_dir%\openliero.exe" goto launch
 set "game_dir=%~dp0install\windows-arm64"
 if exist "%game_dir%\openliero.exe" goto launch
 set "game_dir=%~dp0install\windows-x64-ci"
+if exist "%game_dir%\openliero.exe" goto launch
+set "game_dir=%~dp0install\windows-x64-cross"
 if exist "%game_dir%\openliero.exe" goto launch
 set "game_dir=%~dp0LIERO"
 if exist "%game_dir%\openliero.exe" goto launch

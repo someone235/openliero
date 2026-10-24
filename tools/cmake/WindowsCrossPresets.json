@@ -1,0 +1,45 @@
+{
+	"version": 6,
+	"include": ["PresetTemplates.json"],
+	"configurePresets": [
+		{
+			"name": "windows-x64-cross",
+			"displayName": "Windows (x86_64) from Linux",
+			"inherits": ["default", "condition-linux"],
+			"cacheVariables": {
+				"VCPKG_TARGET_TRIPLET": "x64-mingw-cross",
+				"VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/tools/cmake/toolchains/windows-x64-cross.cmake"
+			}
+		}
+	],
+	"buildPresets": [
+		{
+			"name": "windows-x64-cross",
+			"inherits": ["condition-linux"],
+			"configurePreset": "windows-x64-cross",
+			"configuration": "Release"
+		},
+		{
+			"name": "windows-x64-cross-debug",
+			"inherits": ["condition-linux"],
+			"configurePreset": "windows-x64-cross",
+			"configuration": "Debug"
+		}
+	],
+	"workflowPresets": [
+		{
+			"name": "windows-x64-cross",
+			"steps": [
+				{"type": "configure", "name": "windows-x64-cross"},
+				{"type": "build", "name": "windows-x64-cross"}
+			]
+		},
+		{
+			"name": "windows-x64-cross-debug",
+			"steps": [
+				{"type": "configure", "name": "windows-x64-cross"},
+				{"type": "build", "name": "windows-x64-cross-debug"}
+			]
+		}
+	]
+}

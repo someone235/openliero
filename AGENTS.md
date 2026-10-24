@@ -6,7 +6,13 @@ This file provides guidance to Codex (claude.ai/code) when working with code in 
 
 Open Liero — a faithful continuation of Liero 1.36 (a 2D worm shooter) ported to modern systems (SDL3) with added netplay. C++ for the game; Go for the optional signaling/relay server.
 
-The actual game is inside the `LIERO/` directory.
+`LIERO/` contains the user's local playable game installation.
+
+## Protect the local game directory
+
+- Do not edit, delete, rename, or reorganize existing files in `LIERO/` unless the user explicitly requests those changes. This includes launchers, documentation, settings, profiles, game assets, and replays.
+- You may place or update build artifacts there, such as compiled executables, runtime DLLs, and other generated build output. Preserve existing user data when doing so.
+- Keep ordinary source, documentation, launcher, and configuration edits outside `LIERO/`.
 
 ## Build / Test / Run
 

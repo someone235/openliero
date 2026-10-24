@@ -6,7 +6,8 @@
 		"patch": 0
 	},
 	"include": [
-		"tools/cmake/PresetTemplates.json"
+		"tools/cmake/PresetTemplates.json",
+		"tools/cmake/WindowsCrossPresets.json"
 	],
 	"configurePresets": [
 		{

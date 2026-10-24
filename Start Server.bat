@@ -1,5 +1,7 @@
 @echo off
-setlocal
+setlocal DisableDelayedExpansion
+call "%~dp0scripts\load-env.bat"
+if not defined OPENLIERO_SIGNALING_PORT set "OPENLIERO_SIGNALING_PORT=19533"
 pushd "%~dp0server" || exit /b 1
 
 rem Rebuild when Go is available; otherwise use the existing executable.
@@ -11,9 +13,9 @@ if errorlevel 1 goto build_failed
 
 :check_binary
 if not exist "%~dp0server\openliero-relay.exe" goto missing_binary
-echo Starting OpenLiero signaling server on UDP port 19533.
+echo Starting OpenLiero signaling server on UDP port %OPENLIERO_SIGNALING_PORT%.
 echo Keep this window open while playing. Press Ctrl+C to stop the server.
-"%~dp0server\openliero-relay.exe" %*
+"%~dp0server\openliero-relay.exe" --port "%OPENLIERO_SIGNALING_PORT%" %*
 set "server_exit=%errorlevel%"
 popd
 if "%server_exit%"=="0" exit /b 0
